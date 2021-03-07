@@ -1,0 +1,100 @@
+resource "aws_lb" "alb"{  
+  name                = var.alb_name  
+  subnets             = var.alb_subnets
+  security_groups     = var.alb_sg
+  load_balancer_type  = var.alb_load_balancer_type
+  internal            = var.alb_internal  
+  idle_timeout        = var.alb_idle_timeout   
+  tags {    
+    Name  = var.alb_name    
+  }
+}
+
+resource "aws_lb_target_group" "alb_target_group"{  
+  name     = var.alb_target_name  
+  port     = var.alb_tg_port  
+  protocol    = var.alb_tg_protocol 
+  vpc_id   = var.vpc_id   
+  stickiness = {        
+    enabled         = var.alb_tg_stickiness  
+  }   
+  health_check =  {    
+    healthy_threshold   = var.alb_tg_healthy_threshold  
+    unhealthy_threshold = var.alb_tg_unhealthy_threshold   
+    timeout             = var.alb_tg_timeout   
+    interval            = var.alb_tg_interval    
+    path                = var.alb_listener_path_values    
+    port             = var.health_check_port  
+    matcher          = "200"
+  }
+  tags = {    
+    name =   var.alb_target_name  
+  } 
+}
+
+resource "aws_lb_listener" "alb_listener"{  
+  load_balancer_arn = aws_alb.alb.arn 
+  port              = var.alb_listener_port  
+  protocol          = var.alb_listener_protocol
+  
+  default_action = {    
+    target_group_arn = aws_lb_target_group.alb_target.arn
+    type             = "forward"  
+  }
+}
+
+# resource "aws_lb_listener_rule" "listener_rule"{
+#   #depends_on   = ["aws_lb_target_group.alb_target_group"]  
+#   listener_arn = aws_alb_listener.alb_listener.arn  
+#   priority     = var.alb_listener_priority
+#   action{    
+#     type             = "forward"    
+#     target_group_arn = aws_lb_target_group.alb_target_group.arn
+#   }   
+#   condition {    
+#     field  = "path-pattern"    
+#     values = var.alb_listener_path_values  
+#   }
+# }
+
+
+resource "aws_autoscaling_group" "asg_test" {
+  name                       = var.asg_name
+  launch_configuration       = aws_launch_configuration.launch_config.name
+  desired_capacity           = var.asg-def-size
+  min_size                   = var.min_size
+  max_size                   = var.max_size
+  load_balancers             = aws_alb.alb
+  vpc_zone_identifier       = var.vpc_zone_identifier
+  health_check_type          = var.health_check_type
+  health_check_grace_period  = var.health_check_grace_period
+  # tag = {
+  #   key                 = var.key
+  #   value               = var.value
+  #   # propagate_at_launch = var.propagate_at_launch
+  # }
+}
+
+resource "aws_launch_configuration" "launch_config" {
+  name_prefix                 = var.launch-config-name
+  image_id                    = var.image_id
+  instance_type               = var.instance-type
+  key_name                    = var.instance-key-name != "" ? var.instance-key-name : ""
+  user_data                   = var.user_data != "" ? base64encode(file(var.user_data)) : ""
+  associate_public_ip_address = var.instance-associate-public-ip == "true" ? true : false
+  security_groups             = var.vpc_security_group_ids_list
+  ebs_block_device = [
+    {
+      device_name           = var.ebs_device_name
+      volume_type           = var.ebs_volume_type
+      volume_size           = var.ebs_volume_size
+      # delete_on_termination = var.delete_on_termination
+    }
+  ]
+  root_block_device = [
+    {
+      volume_size = var.root_volume_size
+      volume_type = var.root_volume_type
+    }
+  ]
+}
